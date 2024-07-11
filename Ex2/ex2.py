@@ -1,4 +1,5 @@
 import pandas as pd
+from sklearn.model_selection import train_test_split
 
 
 def getMissingReport(requiredCols, df):
@@ -27,6 +28,20 @@ def reportDataTypes(df, groupName):
           f"Negative samples: {negativeNums}, in percentages: {negPercentage.round(3)}\n")
 
 
+def splitIntoEqualGroups(df, nonZeroValues):
+    trainDf, testDf = train_test_split(nonZeroValues, test_size=0.1, stratify=nonZeroValues['Group'])
+    positiveNums = (testDf['Group'] == 'Positive').sum()
+    negativeNums = (testDf['Group'] == 'Negative').sum()
+    size = len(testDf)
+    posPercentage = (positiveNums / size) * 100
+    negPercentage = (negativeNums / size) * 100
+
+    print(f"Group:\n"
+          f"Total samples: \n"
+          f"Positive samples: {positiveNums}, in percentages: {posPercentage.round(3)}\n"
+          f"Negative samples: {negativeNums}, in percentages: {negPercentage.round(3)}\n")
+
+
 def analyse_s2_stats_ex2():
     df = pd.read_csv('s2.csv')
 
@@ -51,6 +66,9 @@ def analyse_s2_stats_ex2():
     reportDataTypes(df, 'Original')
     reportDataTypes(trainDf, 'Training')
     reportDataTypes(testDf, 'Test')
+
+    # Stage 5:
+    splitIntoEqualGroups(df, nonZeroValues)
 
 
 if __name__ == '__main__':
