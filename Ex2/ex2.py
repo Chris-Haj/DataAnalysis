@@ -28,29 +28,6 @@ def reportDataTypes(df, groupName):
           f"Negative samples: {negativeNums}, in percentages: {negPercentage.round(3)}\n")
 
 
-def splitIntoEqualGroups(nonZeroValues):
-    dfPos = (nonZeroValues['Group'] == 'Positive').sum()
-    dfNeg = (nonZeroValues['Group'] == 'Negative').sum()
-
-    trainDf, testDf = train_test_split(nonZeroValues, test_size=0.1, stratify=nonZeroValues['Group'])
-    testPosNums = (testDf['Group'] == 'Positive').sum()
-    testNegNums = (testDf['Group'] == 'Negative').sum()
-    size = len(testDf)
-
-    trainPosNums = (trainDf['Group'] == 'Positive').sum()
-    trainNegNums = (trainDf['Group'] == 'Negative').sum()
-
-    print(f"All Data:\n"
-          f"Positive samples: {dfPos}, in percentages: {(dfPos / len(nonZeroValues) * 100).round(3)}\n"
-          f"Negative samples: {dfNeg}, in percentages: {(dfNeg / len(nonZeroValues) * 100).round(3)}\n"
-          f"Training Data:\n"
-          f"Positive samples: {trainPosNums}, in percentages: {(trainPosNums / len(trainDf) * 100).round(3)}\n"
-          f"Negative samples: {trainNegNums}, in percentages: {(trainNegNums / len(trainDf) * 100).round(3)}\n"
-          f"\nTest Data:\n"
-          f"Positive samples: {testPosNums}, in percentages: {(testPosNums / size * 100).round(3)}\n"
-          f"Negative samples: {testNegNums}, in percentages: {(testNegNums / size * 100).round(3)}\n")
-
-
 def analyse_s2_stats_ex2():
     df = pd.read_csv('s2.csv')
 
@@ -69,15 +46,22 @@ def analyse_s2_stats_ex2():
 
     nonZeroValues = df.loc[nonZeroIndexes]
     trainSize = int(len(nonZeroValues) * 0.9)
-    trainDf = nonZeroValues[:trainSize]
-    testDf = nonZeroValues[trainSize:]
-    assert len(trainDf) + len(testDf) == len(nonZeroValues), "The training set and the test set do not sum up to the size of the original data frame"
+    trainDfEqualRatios = nonZeroValues[:trainSize]
+    testDfEqualRatios = nonZeroValues[trainSize:]
+    assert len(trainDfEqualRatios) + len(testDfEqualRatios) == len(
+        nonZeroValues), "The training set and the test set do not sum up to the size of the original data frame"
     reportDataTypes(nonZeroValues, 'Original')
-    reportDataTypes(trainDf, 'Training')
-    reportDataTypes(testDf, 'Test')
+    reportDataTypes(trainDfEqualRatios, 'Training')
+    reportDataTypes(testDfEqualRatios, 'Test')
 
     # Stage 5:
-    splitIntoEqualGroups(nonZeroValues)
+    trainDfEqualRatios, testDfEqualRatios = train_test_split(nonZeroValues, test_size=0.1,
+                                                             stratify=nonZeroValues['Group'])
+    assert len(trainDfEqualRatios) + len(testDfEqualRatios) == len(
+        nonZeroValues), "The training set and the test set do not sum up to the size of the original data frame"
+    reportDataTypes(nonZeroValues, 'Original')
+    reportDataTypes(trainDfEqualRatios, 'TrainingEqualRatios')
+    reportDataTypes(testDfEqualRatios, 'TestEqualRatios')
 
 
 if __name__ == '__main__':
