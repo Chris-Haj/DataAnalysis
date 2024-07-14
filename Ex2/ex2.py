@@ -1,8 +1,8 @@
 import pandas as pd
 from sklearn.model_selection import StratifiedKFold, train_test_split
-from sklearn.metrics import confusion_matrix, roc_curve
+from sklearn.metrics import confusion_matrix, roc_curve, auc
 import numpy as np
-
+import matplotlib.pyplot as plt
 
 def getMissingReport(requiredCols, df):
     numMissing = (df[requiredCols] == 0).sum()
@@ -14,7 +14,6 @@ def getMissingReport(requiredCols, df):
         'Missing rate': missingRate.values
     })
     print(missingReport, "\n\n")
-
 
 def reportDataTypes(df, groupName):
     positiveNums = (df['Group'] == 'Positive').sum()
@@ -29,11 +28,9 @@ def reportDataTypes(df, groupName):
           f"Positive samples: {positiveNums}, in percentages: {posPercentage.round(3)}\n"
           f"Negative samples: {negativeNums}, in percentages: {negPercentage.round(3)}\n")
 
-
 def confusionMatrixReport(actuals, predictions, groupName):
     cm = confusion_matrix(actuals, predictions, labels=['Positive', 'Negative'])
     print(f"\nConfusion Matrix for {groupName} group:\n{cm}")
-
 
 def findOptimalThreshold(df, column, targetColumn):
     thresholds = np.linspace(0, 2, 200)
@@ -53,7 +50,6 @@ def findOptimalThreshold(df, column, targetColumn):
 
     return bestThreshold
 
-
 def analyse_s2_stats_ex2():
     df = pd.read_csv('s2.csv')
 
@@ -65,7 +61,6 @@ def analyse_s2_stats_ex2():
     requiredData = (df[requiredCols] == 0).sum(axis=1) / len(requiredCols) < 0.05
     nonZeroIndexes = df[requiredData].index.tolist()
 
-    # Save the indices to a text file
     with open('NonZeroIndexes.txt', 'w') as file:
         for index in nonZeroIndexes:
             file.write(f"{index}\n")
@@ -77,17 +72,13 @@ def analyse_s2_stats_ex2():
     trainSize = int(len(nonZeroValues) * 0.9)
     trainDf = nonZeroValues[:trainSize].copy()
     testDf = nonZeroValues[trainSize:].copy()
-    assert len(trainDf) + len(testDf) == len(
-        nonZeroValues), "The training set and the test set do not sum up to the size of the original data frame"
+    assert len(trainDf) + len(testDf) == len(nonZeroValues), "The training set and the test set do not sum up to the size of the original data frame"
     reportDataTypes(nonZeroValues, 'Original')
     reportDataTypes(trainDf, 'Training')
     reportDataTypes(testDf, 'Test')
 
-    # Stage 5:
-    trainDfEqualRatios, testDfEqualRatios = train_test_split(nonZeroValues, test_size=0.1,
-                                                             stratify=nonZeroValues['Group'])
-    assert len(trainDfEqualRatios) + len(testDfEqualRatios) == len(
-        nonZeroValues), "The training set and the test set do not sum up to the size of the original data frame"
+    trainDfEqualRatios, testDfEqualRatios = train_test_split(nonZeroValues, test_size=0.1, stratify=nonZeroValues['Group'])
+    assert len(trainDfEqualRatios) + len(testDfEqualRatios) == len(nonZeroValues), "The training set and the test set do not sum up to the size of the original data frame"
     reportDataTypes(nonZeroValues, 'Original')
     reportDataTypes(trainDfEqualRatios, 'TrainingEqualRatios')
     reportDataTypes(testDfEqualRatios, 'TestEqualRatios')
@@ -106,45 +97,71 @@ def analyse_s2_stats_ex2():
     for name in ratioNames:
         createMutationLabelsConfusionMatrix(name, f'{name}_ref', f'{name}_alt')
 
-    # Stage 6:
-    pass
-    confusionMatrixReport(trainDf['Group'], trainDf['Mutation'], 'Training')
-    confusionMatrixReport(testDf['Group'], testDf['Mutation'], 'Test')
-    confusionMatrixReport(trainDfEqualRatios['Group'], trainDfEqualRatios['Mutation'], 'TrainingEqualRatios')
-    confusionMatrixReport(testDfEqualRatios['Group'], testDfEqualRatios['Mutation'], 'TestEqualRatios')
+    def stratify(name, labelRef, labelAlt):
+        skf = StratifiedKFold(n_splits=10, shuffle=True, random_state=42)
+        cm_train_total = np.zeros((2, 2))
+        cm_test_total = np.zeros((2, 2))
+        tprs = []
+        aucs = []
+        mean_fpr = np.linspace(0, 1, 100)
+        plt.figure(figsize=(10, 6))
 
-    # Stage 7: 10-fold cross-validation
-    skf = StratifiedKFold(n_splits=10, shuffle=True, random_state=42)
-    cm_train_total = np.zeros((2, 2))
-    cm_test_total = np.zeros((2, 2))
+        for i, (train_index, test_index) in enumerate(skf.split(nonZeroValues, nonZeroValues['Group'])):
+            fold_train = nonZeroValues.iloc[train_index].copy()
+            fold_test = nonZeroValues.iloc[test_index].copy()
 
-    for train_index, test_index in skf.split(nonZeroValues, nonZeroValues['Group']):
-        fold_train = nonZeroValues.iloc[train_index].copy()
-        fold_test = nonZeroValues.iloc[test_index].copy()
+            fold_train[f'ratio_{name}'] = fold_train[labelRef] / fold_train[labelAlt]
+            fold_test[f'ratio_{name}'] = fold_test[labelRef] / fold_test[labelAlt]
 
-        fold_train['ratio_PWM'] = fold_train['PWM_ref'] / fold_train['PWM_alt']
-        fold_test['ratio_PWM'] = fold_test['PWM_ref'] / fold_test['PWM_alt']
+            fold_train[f'Mutation_{name}'] = np.where(fold_train[f'ratio_{name}'] > 1, 'Positive', 'Negative')
+            fold_test[f'Mutation_{name}'] = np.where(fold_test[f'ratio_{name}'] > 1, 'Positive', 'Negative')
 
-        fold_train['Mutation'] = np.where(fold_train['ratio_PWM'] > 1, 'Positive', 'Negative')
-        fold_test['Mutation'] = np.where(fold_test['ratio_PWM'] > 1, 'Positive', 'Negative')
+            confusionMatrixReport(fold_train['Group'], fold_train[f'Mutation_{name}'], f'{name} train')
+            confusionMatrixReport(fold_test['Group'], fold_test[f'Mutation_{name}'], f'{name} test')
 
-        y_train_true = fold_train['Group']
-        y_train_pred = fold_train['Mutation']
-        y_test_true = fold_test['Group']
-        y_test_pred = fold_test['Mutation']
+            cm_train = confusion_matrix(fold_train['Group'], fold_train[f'Mutation_{name}'], labels=['Positive', 'Negative'])
+            cm_test = confusion_matrix(fold_test['Group'], fold_test[f'Mutation_{name}'], labels=['Positive', 'Negative'])
 
-        cm_train = confusion_matrix(y_train_true, y_train_pred, labels=['Positive', 'Negative'])
-        cm_test = confusion_matrix(y_test_true, y_test_pred, labels=['Positive', 'Negative'])
+            cm_train_total += cm_train
+            cm_test_total += cm_test
 
-        cm_train_total += cm_train
-        cm_test_total += cm_test
+            y_test = fold_test['Group'].apply(lambda x: 1 if x == 'Positive' else 0)
+            y_score = fold_test[f'ratio_{name}']
 
-    avg_cm_train = cm_train_total / 10
-    avg_cm_test = cm_test_total / 10
+            fpr, tpr, _ = roc_curve(y_test, y_score)
+            roc_auc = auc(fpr, tpr)
+            aucs.append(roc_auc)
+            plt.plot(fpr, tpr, lw=1, alpha=0.3, label=f'Fold {i} AUC: {roc_auc:.3f}')
 
-    print(f"\nAverage Confusion Matrix for Training (10-fold CV):\n{avg_cm_train}")
-    print(f"\nAverage Confusion Matrix for Test (10-fold CV):\n{avg_cm_test}")
+            tprs.append(np.interp(mean_fpr, fpr, tpr))
+            tprs[-1][0] = 0.0
 
+        avg_cm_train = cm_train_total / 10
+        avg_cm_test = cm_test_total / 10
+        print(f"\nAverage Confusion Matrix for Training (10-fold CV):\n{avg_cm_train}")
+        print(f"\nAverage Confusion Matrix for Test (10-fold CV):\n{avg_cm_test}")
+
+        mean_tpr = np.mean(tprs, axis=0)
+        mean_tpr[-1] = 1.0
+        mean_auc = auc(mean_fpr, mean_tpr)
+        std_auc = np.std(aucs)
+
+        plt.plot(mean_fpr, mean_tpr, color='b', lw=2, alpha=0.8, label=f'Mean ROC (AUC: {mean_auc:.3f} ± {std_auc:.3f})')
+        plt.plot([0, 1], [0, 1], linestyle='--', lw=2, color='r', alpha=0.8)
+        std_tpr = np.std(tprs, axis=0)
+        tprs_upper = np.minimum(mean_tpr + std_tpr, 1)
+        tprs_lower = np.maximum(mean_tpr - std_tpr, 0)
+        plt.fill_between(mean_fpr, tprs_lower, tprs_upper, color='grey', alpha=.2, label=r'± 1 std. dev.')
+        plt.xlim([-0.05, 1.05])
+        plt.ylim([-0.05, 1.05])
+        plt.xlabel('False Positive Rate')
+        plt.ylabel('True Positive Rate')
+        plt.title(f'Receiver Operating Characteristic for {name}')
+        plt.legend(loc='lower right')
+        plt.show()
+
+    for name in ratioNames:
+        stratify(name, f'{name}_ref', f'{name}_alt')
 
 if __name__ == '__main__':
     analyse_s2_stats_ex2()
